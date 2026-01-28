@@ -8,6 +8,7 @@ import type {
     Channel,
     CustomerSegment,
     PageConfig,
+    SimulationContext,
 } from '../types';
 import {
     generateId,
@@ -21,6 +22,10 @@ import dayjs from 'dayjs';
 interface FloorState {
     // 页面配置
     pageConfigs: PageConfig[];
+
+    // 模拟环境配置
+    simulationTime: string; // 模拟当前时间
+    simulationUserTags: string[]; // 模拟用户标签
 
     // 获取指定渠道的页面配置
     getPageConfig: (channel: Channel) => PageConfig | undefined;
@@ -69,6 +74,18 @@ interface FloorState {
 
     // 根据 ID 获取楼层
     getFloorById: (channel: Channel, floorId: string) => Floor | undefined;
+
+    // 设置模拟时间
+    setSimulationTime: (time: string) => void;
+
+    // 设置模拟用户标签
+    setSimulationUserTags: (tags: string[]) => void;
+
+    // 获取模拟环境上下文
+    getSimulationContext: () => SimulationContext;
+
+    // 判断图片是否应该显示
+    shouldShowImage: (image: FloorImage) => boolean;
 }
 
 // 创建初始页面配置
@@ -85,9 +102,17 @@ const createInitialPageConfig = (channel: Channel): PageConfig => ({
                 {
                     id: generateId(),
                     url: `https://via.placeholder.com/${channel === 'mobile' ? '800x400' : '1200x400'}?text=${channel === 'mobile' ? 'Mobile+Banner' : 'Web+Banner'}`,
-                    linkUrl: 'https://example.com/promotion',
                     alt: '促销活动',
                     order: 1,
+                    action: {
+                        type: 'h5',
+                        targetUrl: 'https://example.com/promotion',
+                    },
+                    strategy: {
+                        priority: 1,
+                        timeRange: null,
+                        targetTags: [],
+                    },
                 },
             ],
             customerSegments: ['all'],
@@ -266,9 +291,11 @@ export const useFloorStore = create<FloorState>()(
                                     const newImage: FloorImage = {
                                         id: generateId(),
                                         url: imageData.url,
-                                        linkUrl: imageData.linkUrl,
                                         alt: imageData.alt,
                                         order: floor.images.length + 1,
+                                        action: imageData.action,
+                                        strategy: imageData.strategy,
+                                        tracking: imageData.tracking,
                                     };
 
                                     return {
@@ -300,8 +327,10 @@ export const useFloorStore = create<FloorState>()(
                                                 ? {
                                                     ...img,
                                                     url: imageData.url,
-                                                    linkUrl: imageData.linkUrl,
                                                     alt: imageData.alt,
+                                                    action: imageData.action,
+                                                    strategy: imageData.strategy,
+                                                    tracking: imageData.tracking,
                                                 }
                                                 : img
                                         ),
@@ -371,6 +400,64 @@ export const useFloorStore = create<FloorState>()(
             getFloorById: (channel, floorId) => {
                 const config = get().getPageConfig(channel);
                 return config?.floors.find((floor) => floor.id === floorId);
+            },
+
+            // 模拟环境初始值
+            simulationTime: getCurrentTimeString(),
+            simulationUserTags: [],
+
+            // 设置模拟时间
+            setSimulationTime: (time) => {
+                set({ simulationTime: time });
+            },
+
+            // 设置模拟用户标签
+            setSimulationUserTags: (tags) => {
+                set({ simulationUserTags: tags });
+            },
+
+            // 获取模拟环境上下文
+            getSimulationContext: () => {
+                const state = get();
+                return {
+                    currentTime: state.simulationTime,
+                    userTags: state.simulationUserTags,
+                };
+            },
+
+            // 判断图片是否应该显示
+            shouldShowImage: (image) => {
+                // 数据兼容性检查:如果旧数据没有strategy属性,默认显示
+                if (!image.strategy) {
+                    return true;
+                }
+
+                const { currentTime, userTags } = get().getSimulationContext();
+
+                // 1. 时间校验
+                if (image.strategy.timeRange) {
+                    const [startTime, endTime] = image.strategy.timeRange;
+                    const now = dayjs(currentTime);
+                    const start = dayjs(startTime);
+                    const end = dayjs(endTime);
+
+                    if (now.isBefore(start) || now.isAfter(end)) {
+                        return false;
+                    }
+                }
+
+                // 2. 标签校验
+                if (image.strategy.targetTags && image.strategy.targetTags.length > 0) {
+                    // 如果图片配置了标签,则要求用户必须拥有其中至少一个标签
+                    const hasIntersection = image.strategy.targetTags.some(tag =>
+                        userTags.includes(tag)
+                    );
+                    if (!hasIntersection) {
+                        return false;
+                    }
+                }
+
+                return true;
             },
         }),
         {

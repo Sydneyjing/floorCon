@@ -1,8 +1,11 @@
 import React from 'react';
-import { Typography, Space, Tag, Divider } from 'antd';
+import { Typography, Space, Tag, Divider, DatePicker, Select, Card } from 'antd';
+import { ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { useFloorStore } from '../../../store/useFloorStore';
 import type { Channel, CustomerSegment } from '../../../types';
+import { USER_TAG_OPTIONS } from '../../../types';
 import FloorRenderer from '../../../components/Preview/FloorRenderer';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
@@ -12,7 +15,14 @@ interface PreviewPanelProps {
 }
 
 const PreviewPanel: React.FC<PreviewPanelProps> = ({ channel, selectedSegment }) => {
-    const { getFloorsBySegment } = useFloorStore();
+    const {
+        getFloorsBySegment,
+        simulationTime,
+        simulationUserTags,
+        setSimulationTime,
+        setSimulationUserTags,
+    } = useFloorStore();
+
     const floors = getFloorsBySegment(channel, selectedSegment);
 
     return (
@@ -32,6 +42,52 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ channel, selectedSegment })
                     </Space>
                 </Space>
             </div>
+
+            <Divider style={{ margin: '12px 0' }} />
+
+            {/* 模拟环境控制 */}
+            <Card size="small" title="模拟环境" style={{ marginBottom: 16 }}>
+                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                    <div>
+                        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                            <Text type="secondary">
+                                <ClockCircleOutlined /> 模拟时间
+                            </Text>
+                            <DatePicker
+                                showTime
+                                value={dayjs(simulationTime)}
+                                onChange={(date) => {
+                                    if (date) {
+                                        setSimulationTime(date.format('YYYY-MM-DD HH:mm:ss'));
+                                    }
+                                }}
+                                format="YYYY-MM-DD HH:mm:ss"
+                                style={{ width: '100%' }}
+                                placeholder="选择模拟时间"
+                            />
+                        </Space>
+                    </div>
+
+                    <div>
+                        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                            <Text type="secondary">
+                                <UserOutlined /> 模拟用户标签
+                            </Text>
+                            <Select
+                                mode="multiple"
+                                value={simulationUserTags}
+                                onChange={setSimulationUserTags}
+                                placeholder="选择用户标签"
+                                style={{ width: '100%' }}
+                                options={USER_TAG_OPTIONS.map(opt => ({
+                                    value: opt.value,
+                                    label: opt.label,
+                                }))}
+                            />
+                        </Space>
+                    </div>
+                </Space>
+            </Card>
 
             <Divider style={{ margin: '12px 0' }} />
 
