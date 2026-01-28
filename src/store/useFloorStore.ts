@@ -9,6 +9,8 @@ import type {
     CustomerSegment,
     PageConfig,
     SimulationContext,
+    NavbarConfig,
+    NavbarItem,
 } from '../types';
 import {
     generateId,
@@ -86,6 +88,36 @@ interface FloorState {
 
     // 判断图片是否应该显示
     shouldShowImage: (image: FloorImage) => boolean;
+
+    // ==================== 导航栏相关 ====================
+
+    // 更新导航栏配置
+    updateNavbarConfig: (
+        channel: Channel,
+        floorId: string,
+        config: Partial<NavbarConfig>
+    ) => void;
+
+    // 添加导航项
+    addNavbarItem: (
+        channel: Channel,
+        floorId: string,
+        item: Omit<NavbarItem, 'id' | 'order'>
+    ) => void;
+
+    // 更新导航项
+    updateNavbarItem: (
+        channel: Channel,
+        floorId: string,
+        itemId: string,
+        item: Partial<Omit<NavbarItem, 'id' | 'order'>>
+    ) => void;
+
+    // 删除导航项
+    deleteNavbarItem: (channel: Channel, floorId: string, itemId: string) => void;
+
+    // 重新排序导航项
+    reorderNavbarItems: (channel: Channel, floorId: string, itemIds: string[]) => void;
 }
 
 // 创建初始页面配置
@@ -169,6 +201,16 @@ export const useFloorStore = create<FloorState>()(
                     status: data.status,
                     createdAt: getCurrentTimeString(),
                     updatedAt: getCurrentTimeString(),
+                    // 如果是导航栏类型,初始化默认配置
+                    navbarConfig: data.type === 'navbar' ? {
+                        position: 'bottom',
+                        height: 56,
+                        backgroundColor: '#FFFFFF',
+                        textColor: '#666666',
+                        activeColor: '#1890ff',
+                        iconSize: 24,
+                        items: [],
+                    } : undefined,
                 };
 
                 set((state) => ({
@@ -458,6 +500,165 @@ export const useFloorStore = create<FloorState>()(
                 }
 
                 return true;
+            },
+
+            // ==================== 导航栏相关 ====================
+
+            // 更新导航栏配置
+            updateNavbarConfig: (channel, floorId, config) => {
+                set((state) => ({
+                    pageConfigs: state.pageConfigs.map((pageConfig) =>
+                        pageConfig.channel === channel
+                            ? {
+                                ...pageConfig,
+                                floors: pageConfig.floors.map((floor) =>
+                                    floor.id === floorId
+                                        ? {
+                                            ...floor,
+                                            navbarConfig: {
+                                                ...floor.navbarConfig!,
+                                                ...config,
+                                            },
+                                            updatedAt: getCurrentTimeString(),
+                                        }
+                                        : floor
+                                ),
+                                updatedAt: getCurrentTimeString(),
+                            }
+                            : pageConfig
+                    ),
+                }));
+            },
+
+            // 添加导航项
+            addNavbarItem: (channel, floorId, item) => {
+                set((state) => ({
+                    pageConfigs: state.pageConfigs.map((config) =>
+                        config.channel === channel
+                            ? {
+                                ...config,
+                                floors: config.floors.map((floor) => {
+                                    if (floor.id !== floorId || !floor.navbarConfig) return floor;
+
+                                    // 限制最多5个导航项
+                                    if (floor.navbarConfig.items.length >= 5) {
+                                        console.warn('导航项数量已达上限(5个)');
+                                        return floor;
+                                    }
+
+                                    const newItem: NavbarItem = {
+                                        id: generateId(),
+                                        ...item,
+                                        order: floor.navbarConfig.items.length + 1,
+                                    };
+
+                                    return {
+                                        ...floor,
+                                        navbarConfig: {
+                                            ...floor.navbarConfig,
+                                            items: [...floor.navbarConfig.items, newItem],
+                                        },
+                                        updatedAt: getCurrentTimeString(),
+                                    };
+                                }),
+                                updatedAt: getCurrentTimeString(),
+                            }
+                            : config
+                    ),
+                }));
+            },
+
+            // 更新导航项
+            updateNavbarItem: (channel, floorId, itemId, item) => {
+                set((state) => ({
+                    pageConfigs: state.pageConfigs.map((config) =>
+                        config.channel === channel
+                            ? {
+                                ...config,
+                                floors: config.floors.map((floor) => {
+                                    if (floor.id !== floorId || !floor.navbarConfig) return floor;
+
+                                    return {
+                                        ...floor,
+                                        navbarConfig: {
+                                            ...floor.navbarConfig,
+                                            items: floor.navbarConfig.items.map((navItem) =>
+                                                navItem.id === itemId
+                                                    ? { ...navItem, ...item }
+                                                    : navItem
+                                            ),
+                                        },
+                                        updatedAt: getCurrentTimeString(),
+                                    };
+                                }),
+                                updatedAt: getCurrentTimeString(),
+                            }
+                            : config
+                    ),
+                }));
+            },
+
+            // 删除导航项
+            deleteNavbarItem: (channel, floorId, itemId) => {
+                set((state) => ({
+                    pageConfigs: state.pageConfigs.map((config) =>
+                        config.channel === channel
+                            ? {
+                                ...config,
+                                floors: config.floors.map((floor) => {
+                                    if (floor.id !== floorId || !floor.navbarConfig) return floor;
+
+                                    const updatedItems = floor.navbarConfig.items.filter(
+                                        (item) => item.id !== itemId
+                                    );
+
+                                    return {
+                                        ...floor,
+                                        navbarConfig: {
+                                            ...floor.navbarConfig,
+                                            items: reorderItems(updatedItems),
+                                        },
+                                        updatedAt: getCurrentTimeString(),
+                                    };
+                                }),
+                                updatedAt: getCurrentTimeString(),
+                            }
+                            : config
+                    ),
+                }));
+            },
+
+            // 重新排序导航项
+            reorderNavbarItems: (channel, floorId, itemIds) => {
+                set((state) => ({
+                    pageConfigs: state.pageConfigs.map((config) => {
+                        if (config.channel !== channel) return config;
+
+                        return {
+                            ...config,
+                            floors: config.floors.map((floor) => {
+                                if (floor.id !== floorId || !floor.navbarConfig) return floor;
+
+                                const itemsMap = new Map(
+                                    floor.navbarConfig.items.map((item) => [item.id, item])
+                                );
+                                const reorderedItems = itemIds
+                                    .map((id) => itemsMap.get(id))
+                                    .filter((item): item is NavbarItem => item !== undefined);
+
+                                return {
+                                    ...floor,
+                                    navbarConfig: {
+                                        ...floor.navbarConfig,
+                                        items: reorderItems(reorderedItems),
+                                    },
+                                    updatedAt: getCurrentTimeString(),
+                                };
+                            }),
+                            updatedAt: getCurrentTimeString(),
+                        };
+                    }),
+                }));
             },
         }),
         {

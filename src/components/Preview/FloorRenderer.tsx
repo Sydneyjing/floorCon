@@ -3,6 +3,7 @@ import { Card, Typography, Empty } from 'antd';
 import type { Floor, Channel } from '../../types';
 import { FLOOR_TYPE_OPTIONS } from '../../types';
 import { useFloorStore } from '../../store/useFloorStore';
+import NavbarRenderer from './NavbarRenderer';
 import './FloorRenderer.css';
 
 const { Text } = Typography;
@@ -18,6 +19,11 @@ const FloorRenderer: React.FC<FloorRendererProps> = ({ floor }) => {
     const shouldShowImage = useFloorStore((state) => state.shouldShowImage);
 
     const floorTypeOption = FLOOR_TYPE_OPTIONS.find((opt) => opt.value === floor.type);
+
+    // 如果是导航栏类型,直接渲染导航栏
+    if (floor.type === 'navbar') {
+        return <NavbarRenderer floor={floor} />;
+    }
 
     // 过滤出应该显示的图片
     const visibleImages = floor.images.filter(shouldShowImage);

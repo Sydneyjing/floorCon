@@ -13,6 +13,8 @@ import type { Channel, FloorFormData } from '../../../types';
 import { FLOOR_TYPE_OPTIONS, CUSTOMER_SEGMENT_OPTIONS } from '../../../types';
 import { useFloorStore } from '../../../store/useFloorStore';
 import ImageManager from './ImageManager';
+import NavbarConfigForm from './NavbarConfigForm';
+import NavbarItemManager from './NavbarItemManager';
 import dayjs from 'dayjs';
 
 interface FloorModalProps {
@@ -189,7 +191,24 @@ const FloorModal: React.FC<FloorModalProps> = ({
                 </Form>
             ),
         },
-        {
+        // 根据楼层类型动态添加第二个tab
+        ...(floor && floor.type === 'navbar' ? [{
+            key: 'navbar',
+            label: `导航栏配置`,
+            children: isEdit && floorId ? (
+                <>
+                    <NavbarConfigForm channel={channel} floorId={floorId} />
+                    <NavbarItemManager channel={channel} floorId={floorId} />
+                </>
+            ) : (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
+                    请先保存楼层基本信息后再配置导航栏
+                </div>
+            ),
+            disabled: !isEdit,
+        }] : []),
+        // 非导航栏类型或新建楼层时显示图片管理
+        ...(!floor || floor.type !== 'navbar' ? [{
             key: 'images',
             label: `图片管理${floor ? ` (${floor.images.length})` : ''} `,
             children: isEdit && floorId ? (
@@ -200,8 +219,9 @@ const FloorModal: React.FC<FloorModalProps> = ({
                 </div>
             ),
             disabled: !isEdit,
-        },
+        }] : []),
     ];
+
 
     return (
         <Modal

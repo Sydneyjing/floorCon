@@ -26,7 +26,6 @@ import {
     message,
     Card,
     Select,
-    DatePicker,
     Form,
     Tag,
 } from 'antd';
@@ -39,24 +38,21 @@ import {
     CloseOutlined,
 } from '@ant-design/icons';
 import { useFloorStore } from '../../../store/useFloorStore';
-import type { Channel, FloorImage, FloorImageFormData } from '../../../types';
-import { ACTION_TYPE_OPTIONS, USER_TAG_OPTIONS } from '../../../types';
-import dayjs from 'dayjs';
+import type { Channel, NavbarItem } from '../../../types';
+import { ACTION_TYPE_OPTIONS } from '../../../types';
 
-const { RangePicker } = DatePicker;
-
-interface ImageManagerProps {
+interface NavbarItemManagerProps {
     channel: Channel;
     floorId: string;
 }
 
-interface ImageItemProps {
-    image: FloorImage;
-    onEdit: (image: FloorImage) => void;
-    onDelete: (imageId: string) => void;
+interface NavbarItemProps {
+    item: NavbarItem;
+    onEdit: (item: NavbarItem) => void;
+    onDelete: (itemId: string) => void;
 }
 
-const ImageItem: React.FC<ImageItemProps> = ({ image, onEdit, onDelete }) => {
+const NavbarItemComponent: React.FC<NavbarItemProps> = ({ item, onEdit, onDelete }) => {
     const {
         attributes,
         listeners,
@@ -64,14 +60,14 @@ const ImageItem: React.FC<ImageItemProps> = ({ image, onEdit, onDelete }) => {
         transform,
         transition,
         isDragging,
-    } = useSortable({ id: image.id });
+    } = useSortable({ id: item.id });
 
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
     };
 
-    const actionTypeLabel = ACTION_TYPE_OPTIONS.find(opt => opt.value === image.action?.type)?.label || '未知';
+    const actionTypeLabel = ACTION_TYPE_OPTIONS.find(opt => opt.value === item.action.type)?.label || '未知';
 
     return (
         <div
@@ -87,8 +83,8 @@ const ImageItem: React.FC<ImageItemProps> = ({ image, onEdit, onDelete }) => {
                 <HolderOutlined />
             </div>
             <Image
-                src={image.url}
-                alt={image.alt}
+                src={item.icon}
+                alt={item.text}
                 className="image-manager-item-preview"
                 preview={{
                     mask: <div>预览</div>,
@@ -96,38 +92,27 @@ const ImageItem: React.FC<ImageItemProps> = ({ image, onEdit, onDelete }) => {
             />
             <div className="image-manager-item-info">
                 <div style={{ marginBottom: 4 }}>
-                    <Tag color="blue">{actionTypeLabel}</Tag>
-                    {image.action?.type !== 'none' && (
-                        <span style={{ fontSize: 12, color: '#666' }}>
-                            {image.action?.targetUrl}
-                        </span>
-                    )}
+                    <Tag color="blue">{item.text}</Tag>
+                    <Tag color="green">{actionTypeLabel}</Tag>
                 </div>
-                {image.strategy?.targetTags && image.strategy.targetTags.length > 0 && (
-                    <div style={{ marginBottom: 4 }}>
-                        {image.strategy.targetTags.map(tag => (
-                            <Tag key={tag} color="gold" style={{ fontSize: 11 }}>
-                                {USER_TAG_OPTIONS.find(opt => opt.value === tag)?.label || tag}
-                            </Tag>
-                        ))}
+                {item.action.type !== 'none' && (
+                    <div style={{ color: '#666', fontSize: 12 }}>
+                        {item.action.targetUrl}
                     </div>
                 )}
-                <div style={{ color: '#999', fontSize: 12 }}>
-                    {image.alt || '无描述'}
-                </div>
             </div>
             <div className="image-manager-item-actions">
                 <Button
                     type="text"
                     size="small"
                     icon={<EditOutlined />}
-                    onClick={() => onEdit(image)}
+                    onClick={() => onEdit(item)}
                 >
                     编辑
                 </Button>
                 <Popconfirm
-                    title="确定删除此图片吗？"
-                    onConfirm={() => onDelete(image.id)}
+                    title="确定删除此导航项吗？"
+                    onConfirm={() => onDelete(item.id)}
                     okText="确定"
                     cancelText="取消"
                 >
@@ -145,20 +130,20 @@ const ImageItem: React.FC<ImageItemProps> = ({ image, onEdit, onDelete }) => {
     );
 };
 
-const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
+const NavbarItemManager: React.FC<NavbarItemManagerProps> = ({ channel, floorId }) => {
     const {
         getFloorById,
-        addImageToFloor,
-        updateFloorImage,
-        deleteFloorImage,
-        reorderFloorImages,
+        addNavbarItem,
+        updateNavbarItem,
+        deleteNavbarItem,
+        reorderNavbarItems,
     } = useFloorStore();
 
     const floor = getFloorById(channel, floorId);
-    const images = floor?.images || [];
+    const items = floor?.navbarConfig?.items || [];
 
     const [isAdding, setIsAdding] = useState(false);
-    const [editingImage, setEditingImage] = useState<FloorImage | null>(null);
+    const [editingItem, setEditingItem] = useState<NavbarItem | null>(null);
     const [form] = Form.useForm();
 
     const sensors = useSensors(
@@ -172,40 +157,37 @@ const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
         const { active, over } = event;
 
         if (over && active.id !== over.id) {
-            const oldIndex = images.findIndex((img) => img.id === active.id);
-            const newIndex = images.findIndex((img) => img.id === over.id);
+            const oldIndex = items.findIndex((item) => item.id === active.id);
+            const newIndex = items.findIndex((item) => item.id === over.id);
 
-            const reorderedImages = arrayMove(images, oldIndex, newIndex);
-            const imageIds = reorderedImages.map((img) => img.id);
-            reorderFloorImages(channel, floorId, imageIds);
+            const reorderedItems = arrayMove(items, oldIndex, newIndex);
+            const itemIds = reorderedItems.map((item) => item.id);
+            reorderNavbarItems(channel, floorId, itemIds);
         }
     };
 
     const handleAdd = () => {
+        if (items.length >= 5) {
+            message.warning('导航项数量已达上限（5个）');
+            return;
+        }
         setIsAdding(true);
-        setEditingImage(null);
+        setEditingItem(null);
         form.resetFields();
         form.setFieldsValue({
             actionType: 'none',
-            targetTags: [],
         });
     };
 
-    const handleEdit = (image: FloorImage) => {
-        setEditingImage(image);
+    const handleEdit = (item: NavbarItem) => {
+        setEditingItem(item);
         setIsAdding(false);
         form.setFieldsValue({
-            url: image.url,
-            alt: image.alt,
-            actionType: image.action.type,
-            targetUrl: image.action.targetUrl,
-            timeRange: image.strategy.timeRange ? [
-                dayjs(image.strategy.timeRange[0]),
-                dayjs(image.strategy.timeRange[1])
-            ] : null,
-            targetTags: image.strategy.targetTags,
-            clickId: image.tracking?.clickId,
-            exposureId: image.tracking?.exposureId,
+            icon: item.icon,
+            activeIcon: item.activeIcon,
+            text: item.text,
+            actionType: item.action.type,
+            targetUrl: item.action.targetUrl,
         });
     };
 
@@ -213,37 +195,26 @@ const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
         try {
             const values = await form.validateFields();
 
-            const formData: FloorImageFormData = {
-                url: values.url,
-                alt: values.alt || '',
+            const itemData = {
+                icon: values.icon,
+                activeIcon: values.activeIcon,
+                text: values.text,
                 action: {
                     type: values.actionType,
                     targetUrl: values.actionType !== 'none' ? values.targetUrl : undefined,
                 },
-                strategy: {
-                    priority: 1,
-                    timeRange: values.timeRange ? [
-                        values.timeRange[0].format('YYYY-MM-DD HH:mm:ss'),
-                        values.timeRange[1].format('YYYY-MM-DD HH:mm:ss')
-                    ] : null,
-                    targetTags: values.targetTags || [],
-                },
-                tracking: (values.clickId || values.exposureId) ? {
-                    clickId: values.clickId,
-                    exposureId: values.exposureId,
-                } : undefined,
             };
 
-            if (editingImage) {
-                updateFloorImage(channel, floorId, editingImage.id, formData);
+            if (editingItem) {
+                updateNavbarItem(channel, floorId, editingItem.id, itemData);
                 message.success('更新成功');
             } else {
-                addImageToFloor(channel, floorId, formData);
+                addNavbarItem(channel, floorId, itemData);
                 message.success('添加成功');
             }
 
             setIsAdding(false);
-            setEditingImage(null);
+            setEditingItem(null);
             form.resetFields();
         } catch (error) {
             console.error('表单验证失败:', error);
@@ -252,12 +223,12 @@ const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
 
     const handleCancel = () => {
         setIsAdding(false);
-        setEditingImage(null);
+        setEditingItem(null);
         form.resetFields();
     };
 
-    const handleDelete = (imageId: string) => {
-        deleteFloorImage(channel, floorId, imageId);
+    const handleDelete = (itemId: string) => {
+        deleteNavbarItem(channel, floorId, itemId);
         message.success('删除成功');
     };
 
@@ -266,26 +237,34 @@ const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
     return (
         <div className="image-manager">
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                {(isAdding || editingImage) && (
-                    <Card size="small" title={editingImage ? '编辑图片' : '添加图片'}>
+                {(isAdding || editingItem) && (
+                    <Card size="small" title={editingItem ? '编辑导航项' : '添加导航项'}>
                         <Form
                             form={form}
                             layout="vertical"
                             autoComplete="off"
                         >
                             <Form.Item
-                                label="图片地址"
-                                name="url"
-                                rules={[{ required: true, message: '请输入图片地址' }]}
+                                label="导航项文字"
+                                name="text"
+                                rules={[{ required: true, message: '请输入导航项文字' }]}
+                            >
+                                <Input placeholder="例如：首页" maxLength={4} />
+                            </Form.Item>
+
+                            <Form.Item
+                                label="图标URL"
+                                name="icon"
+                                rules={[{ required: true, message: '请输入图标地址' }]}
                             >
                                 <Input placeholder="https://..." />
                             </Form.Item>
 
                             <Form.Item
-                                label="图片描述"
-                                name="alt"
+                                label="选中态图标URL（可选）"
+                                name="activeIcon"
                             >
-                                <Input placeholder="图片描述（可选）" />
+                                <Input placeholder="https://..." />
                             </Form.Item>
 
                             <Form.Item
@@ -317,51 +296,6 @@ const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
                                 </Form.Item>
                             )}
 
-                            <Form.Item
-                                label="生效时间"
-                                name="timeRange"
-                            >
-                                <RangePicker
-                                    showTime
-                                    format="YYYY-MM-DD HH:mm:ss"
-                                    style={{ width: '100%' }}
-                                    placeholder={['开始时间', '结束时间']}
-                                />
-                            </Form.Item>
-
-                            <Form.Item
-                                label="目标客群标签"
-                                name="targetTags"
-                            >
-                                <Select
-                                    mode="multiple"
-                                    placeholder="选择目标客群（可选）"
-                                    options={USER_TAG_OPTIONS.map(opt => ({
-                                        value: opt.value,
-                                        label: opt.label,
-                                    }))}
-                                />
-                            </Form.Item>
-
-                            <Form.Item
-                                label="埋点配置（可选）"
-                            >
-                                <Space direction="vertical" style={{ width: '100%' }}>
-                                    <Form.Item
-                                        name="clickId"
-                                        noStyle
-                                    >
-                                        <Input placeholder="点击监测ID" />
-                                    </Form.Item>
-                                    <Form.Item
-                                        name="exposureId"
-                                        noStyle
-                                    >
-                                        <Input placeholder="曝光监测ID" />
-                                    </Form.Item>
-                                </Space>
-                            </Form.Item>
-
                             <Form.Item>
                                 <Space>
                                     <Button
@@ -380,32 +314,33 @@ const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
                     </Card>
                 )}
 
-                {!isAdding && !editingImage && (
+                {!isAdding && !editingItem && (
                     <Button
                         type="dashed"
                         icon={<PlusOutlined />}
                         onClick={handleAdd}
                         block
+                        disabled={items.length >= 5}
                     >
-                        添加图片
+                        添加导航项 ({items.length}/5)
                     </Button>
                 )}
 
-                {images.length > 0 ? (
+                {items.length > 0 ? (
                     <DndContext
                         sensors={sensors}
                         collisionDetection={closestCenter}
                         onDragEnd={handleDragEnd}
                     >
                         <SortableContext
-                            items={images.map((img) => img.id)}
+                            items={items.map((item) => item.id)}
                             strategy={verticalListSortingStrategy}
                         >
                             <div className="image-manager-list">
-                                {images.map((image) => (
-                                    <ImageItem
-                                        key={image.id}
-                                        image={image}
+                                {items.map((item) => (
+                                    <NavbarItemComponent
+                                        key={item.id}
+                                        item={item}
                                         onEdit={handleEdit}
                                         onDelete={handleDelete}
                                     />
@@ -414,11 +349,11 @@ const ImageManager: React.FC<ImageManagerProps> = ({ channel, floorId }) => {
                         </SortableContext>
                     </DndContext>
                 ) : (
-                    !isAdding && <Empty description="暂无图片" />
+                    !isAdding && <Empty description="暂无导航项" />
                 )}
             </Space>
         </div>
     );
 };
 
-export default ImageManager;
+export default NavbarItemManager;
